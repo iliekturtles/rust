@@ -2267,16 +2267,22 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     }
 
     pub fn mk_ty(&self, st: TypeVariants<'tcx>) -> Ty<'tcx> {
-        let flags = super::flags::FlagComputation::for_sty(&st);
+        let keep_in_local_tcx = super::flags::sty_in_local_arena(&st);
 
         // HACK(eddyb) Depend on flags being accurate to
         // determine that all contents are in the global tcx.
         // See comments on Lift for why we can't use that.
-        if flags.flags.intersects(ty::TypeFlags::KEEP_IN_LOCAL_TCX) {
+        if keep_in_local_tcx {
             let mut interner = self.interners.type_.borrow_mut();
             if let Some(&Interned(ty)) = interner.get(&st) {
                 return ty;
             }
+
+            let flags = super::flags::FlagComputation::for_sty(&st);
+
+            assert_eq!(
+                flags.flags.intersects(ty::TypeFlags::KEEP_IN_LOCAL_TCX),
+                true);
 
             let ty_struct = TyS {
                 sty: st,
@@ -2301,6 +2307,12 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
             if let Some(&Interned(ty)) = interner.get(&st) {
                 return ty;
             }
+
+            let flags = super::flags::FlagComputation::for_sty(&st);
+
+            assert_eq!(
+                flags.flags.intersects(ty::TypeFlags::KEEP_IN_LOCAL_TCX),
+                false);
 
             let ty_struct = TyS {
                 sty: st,
