@@ -317,7 +317,7 @@ pub(crate) fn sty_in_local_arena(st: &ty::TypeVariants) -> bool {
                     ty::ExistentialPredicate::AutoTrait(_) => {}
                 }
             }
-            region_in_local_arena(r)
+            r.keep_in_local_tcx()
         }
 
         ty::TyArray(tt, len) => {
@@ -334,7 +334,7 @@ pub(crate) fn sty_in_local_arena(st: &ty::TypeVariants) -> bool {
         }
 
         ty::TyRef(r, ref m) => {
-            region_in_local_arena(r) ||
+            r.keep_in_local_tcx() ||
             ty_in_local_arena(m.ty)
         }
 
@@ -367,21 +367,6 @@ fn tys_in_local_arena(tys: &[Ty]) -> bool {
     false
 }
 
-fn region_in_local_arena(r: ty::Region) -> bool {
-    match *r {
-        ty::ReVar(..) | ty::ReSkolemized(..) => true,
-        ty::ReLateBound(..) |
-        ty::ReEarlyBound(..) |
-        ty::ReEmpty |
-        ty::ReStatic |
-        ty::ReFree { .. } |
-        ty::ReScope { .. } |
-        ty::ReErased |
-        ty::ReCanonical(..) |
-        ty::ReClosureBound(..) => false
-    }
-}
-
 #[inline(always)]
 fn const_in_local_arena(constant: &ty::Const) -> bool {
     if ty_in_local_arena(constant.ty) {
@@ -401,7 +386,7 @@ fn substs_in_local_arena(substs: &Substs) -> bool {
     }
 
     for r in substs.regions() {
-        if region_in_local_arena(r) {
+        if r.keep_in_local_tcx() {
             return true;
         }
     }
