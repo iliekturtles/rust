@@ -77,10 +77,9 @@ impl BoundRegion {
     }
 }
 
-/// NB: If you change this, you'll probably want to change the corresponding
-/// AST structure in libsyntax/ast.rs as well.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
-pub enum TypeVariants<'tcx> {
+macro_rules! type_variants {
+    ([$($t:tt)*][$($p:tt)*]) => {
+        $($t)*(
     /// The primitive boolean type. Written as `bool`.
     TyBool,
 
@@ -169,8 +168,23 @@ pub enum TypeVariants<'tcx> {
 
     /// A placeholder for a type which could not be computed; this is
     /// propagated to avoid useless error messages.
-    TyError,
+    TyError,)$($p)*
+    }
 }
+
+macro_rules! declare_type_variants {
+    ($($t:tt)*) => {
+        /// NB: If you change this, you'll probably want to change the corresponding
+        /// AST structure in libsyntax/ast.rs as well.
+        #[derive(Clone, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+        pub enum TypeVariants<'tcx> {
+            $($t)*
+        }
+    }
+}
+
+type_variants!([declare_type_variants!][;]);
+
 
 /// A closure can be modeled as a struct that looks like:
 ///

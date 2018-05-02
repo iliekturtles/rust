@@ -250,3 +250,145 @@ impl FlagComputation {
         }
     }
 }
+
+pub(crate) fn sty_in_local_arena(st: &ty::TypeVariants) -> bool {
+    match *st {
+        ty::TyBool |
+        ty::TyChar |
+        ty::TyInt(_) |
+        ty::TyFloat(_) |
+        ty::TyUint(_) |
+        ty::TyNever |
+        ty::TyStr |
+        ty::TyForeign(..) |
+        ty::TyError |
+        ty::TyParam(..) => false,
+
+        ty::TyGenerator(_, ref substs, ref interior) => {
+            substs_in_local_arena(&substs.substs) ||
+            ty_in_local_arena(interior.witness)
+        }
+
+        ty::TyGeneratorWitness(ref ts) => {
+            tys_in_local_arena(&ts.skip_binder()[..])
+        }
+
+        ty::TyClosure(_, ref substs) => {
+            substs_in_local_arena(&substs.substs)
+        }
+
+        ty::TyInfer(infer) => {
+            match infer {
+                ty::FreshTy(_) |
+                ty::FreshIntTy(_) |
+                ty::FreshFloatTy(_) |
+                ty::CanonicalTy(_) => false,
+                ty::TyVar(_) |
+                ty::IntVar(_) |
+                ty::FloatVar(_) => true
+            }
+        }
+
+        ty::TyAdt(_, substs) => {
+            substs_in_local_arena(substs)
+        }
+
+        ty::TyProjection(ref data) => {
+            substs_in_local_arena(data.substs)
+        }
+
+        ty::TyAnon(_, substs) => {
+            substs_in_local_arena(substs)
+        }
+
+        ty::TyDynamic(ref obj, r) => {
+            for predicate in obj.skip_binder().iter() {
+                match *predicate {
+                    ty::ExistentialPredicate::Trait(tr) => {
+                        if substs_in_local_arena(tr.substs) {
+                            return true;
+                        }
+                    }
+                    ty::ExistentialPredicate::Projection(p) => {
+                        if substs_in_local_arena(p.substs) || ty_in_local_arena(p.ty) {
+                            return true;
+                        }
+                    }
+                    ty::ExistentialPredicate::AutoTrait(_) => {}
+                }
+            }
+            r.keep_in_local_tcx()
+        }
+
+        ty::TyArray(tt, len) => {
+            ty_in_local_arena(tt) ||
+            const_in_local_arena(len)
+        }
+
+        ty::TySlice(tt) => {
+            ty_in_local_arena(tt)
+        }
+
+        ty::TyRawPtr(ref m) => {
+            ty_in_local_arena(m.ty)
+        }
+
+        ty::TyRef(r, ref m) => {
+            r.keep_in_local_tcx() ||
+            ty_in_local_arena(m.ty)
+        }
+
+        ty::TyTuple(ref ts) => {
+            tys_in_local_arena(&ts[..])
+        }
+
+        ty::TyFnDef(_, substs) => {
+            substs_in_local_arena(substs)
+        }
+
+        ty::TyFnPtr(f) => {
+            tys_in_local_arena(f.skip_binder().inputs()) ||
+            ty_in_local_arena(f.skip_binder().output())
+        }
+    }
+}
+
+#[inline(always)]
+fn ty_in_local_arena(ty: Ty) -> bool {
+    ty.flags.intersects(ty::TypeFlags::KEEP_IN_LOCAL_TCX)
+}
+
+fn tys_in_local_arena(tys: &[Ty]) -> bool {
+    for &ty in tys {
+        if ty_in_local_arena(ty) {
+            return true;
+        }
+    }
+    false
+}
+
+#[inline(always)]
+fn const_in_local_arena(constant: &ty::Const) -> bool {
+    if ty_in_local_arena(constant.ty) {
+        return true;
+    }
+    match constant.val {
+        ConstVal::Value(_) => false,
+        ConstVal::Unevaluated(_, substs) => substs_in_local_arena(substs),
+    }
+}
+
+fn substs_in_local_arena(substs: &Substs) -> bool {
+    for ty in substs.types() {
+        if ty_in_local_arena(ty) {
+            return true;
+        }
+    }
+
+    for r in substs.regions() {
+        if r.keep_in_local_tcx() {
+            return true;
+        }
+    }
+    false
+}
